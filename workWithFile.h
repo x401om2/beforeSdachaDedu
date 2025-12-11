@@ -7,11 +7,10 @@
 
 typedef struct {
     const char* s;                // указатель на текущую позицию в строке
-    VariableTable* table;
 } parserState;
 
 
-tree_t* loadMathTree(const char* filename, VariableTable* table);
+tree_t* loadMathTree(const char* filename);
 
 
 node_t* getNumber(parserState* st);
