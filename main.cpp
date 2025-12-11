@@ -19,22 +19,22 @@ int main(int argc, char* argv[])
 
     printf("обрабатываем файлик: %s\n", inputFilename);
 
-    VariableTable table = {0};
-    initVariableTable(&table, COUNT_OF_VARIABLES);
+    tree_t* tree = loadMathTree(inputFilename);
 
-    tree_t* tree = loadMathTree(inputFilename, &table);
     if (tree == NULL || tree->root == NULL)
     {
-        printf("не получилось грузануть дерево из файлика  %s\n", inputFilename);
+        printf("не получилось грузануть дерево из файлика - %s\n", inputFilename);
         return 1;
     }
 
-    getVariableValues(&table);
+    double valueOfX = 0;
+
+    getVariableValues(&valueOfX);
 
     float plotMinX = 0, plotMaxX = 0;
     getPlotRangeFromUser(&plotMinX, &plotMaxX);
 
-    createComprehensiveReport(tree, &table, "comprehensive_report.tex", plotMinX, plotMaxX);
+    createComprehensiveReport(tree, "comprehensive_report.tex", plotMinX, plotMaxX , valueOfX);
 
     system("pdflatex -interaction=nonstopmode comprehensive_report.tex");
 
@@ -42,7 +42,6 @@ int main(int argc, char* argv[])
 
     treeRecursiveDelete(tree->root);
     free(tree);
-    deleteTable(&table);
 
     return 0;
 }

@@ -135,7 +135,7 @@ node_t* createTypedNode(type_t type, const char* data, node_t* leftNode, node_t*
 }
 
 
-double countingTree(node_t* node, VariableTable* table)
+double countingTree(node_t* node, double valueOfX)
 {
     if (node == NULL)
     {
@@ -148,29 +148,23 @@ double countingTree(node_t* node, VariableTable* table)
     }
     else if (node->type == VAR)
     {
-        for (int i = 0; i < table->count; i++)
+        if (strcmp(node->object.var, "x") == 0)
         {
-            if (table->variables[i].isDefined && strcmp(table->variables[i].name, node->object.var) == 0)
-            {
-                return table->variables[i].value;
-            }
+            return valueOfX;
         }
-        printf("ahtuing: переменная %s не определена\n", node->object.var);
-        return NAN;
     }
     else if (node->type == OP)
     {
-        double first = countingTree(node->left, table);                         // считаем левое поддерево
-
+        double first = countingTree(node->left, valueOfX);                         // считаем левое поддерево
         if (isnan(first))
         {
             return NAN;
         }
-        double second = 0;
 
+        double second = 0;
         if (node->right != NULL)                                                // если существует правое поддерево то считаем и его
         {
-            second = countingTree(node->right, table);
+            second = countingTree(node->right, valueOfX);
             if (isnan(second))
             {
                 return NAN;
@@ -252,73 +246,21 @@ double countingTree(node_t* node, VariableTable* table)
     }
 }
 
-void initVariableTable(VariableTable* table, int initialCapacity)
+
+
+
+void getVariableValues(double* x)
 {
-    table->variables = (variable_t*)calloc(initialCapacity, sizeof(variable_t));            // выделяет память и устанавливает значения
+    printf("введите значение для x: ");
 
-    table->count = 0;
-    table->capacity = initialCapacity;
-}
-
-
-variable_t* findVarInTable(VariableTable* table, char* name)                        // если не находим то создаем - нам это нужно когда мы считываем текстовик (если нашли - вернем указатель)
-{
-    for (int i = 0; i < table->count; i++)
+    if (scanf("%lf", &x) != 1)
     {
-        if (strcmp(table->variables[i].name, name) == 0)
-        {
-            return &table->variables[i];
-        }
-    }
-
-    if (table->count >= table->capacity)                                            // проверяем нужно ли расширить табличку
-    {
-        table->capacity *= 2;
-        table->variables = (variable_t*)realloc(table->variables, table->capacity * sizeof(variable_t));
-    }
-
-    int pointer = table->count++;
-
-    variable_t* newVariable = &table->variables[pointer];
-
-    newVariable->name = strdup(name);
-    newVariable->value = 0;
-    newVariable->isDefined = false;
-
-    return newVariable;                                                             // возвращ указатель на новую переменную
-}
-
-
-void deleteTable(VariableTable* table)
-{
-    for (int i = 0; i < table->count; i++)
-    {
-        free(table->variables[i].name);
-    }
-
-    free(table->variables);
-    table->count = 0;
-    table->capacity = 0;
-}
-
-
-void getVariableValues(VariableTable* table)                                        // получаем значения переменных
-{
-    printf("\nвведите значения переменных:\n");
-
-    for (int i = 0; i < table->count; i++)
-    {
-        printf("введите значение для %s: ", table->variables[i].name);
-
-        if (scanf("%lf", &table->variables[i].value) != 1)
-        {
-            printf("неверно ввели - по умолчанию поставим 0\n");
-            table->variables[i].value = 0;
-        }
-
-        table->variables[i].isDefined = true;
+        printf("неверно ввели - по умолчанию поставим 0\n");
+        *x = 0;
     }
 }
+
+
 
 void getPlotRangeFromUser(float* minX, float* maxX)                                 // получаем диапазон иксов у пользователя
 {

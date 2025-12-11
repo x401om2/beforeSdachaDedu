@@ -235,16 +235,16 @@ void formulaToLatex(tree_t* tree, FILE* texFile, const char* title)    // про
 }
 
 
-void formulaWithComputationToLatex(tree_t* tree, VariableTable* table, FILE* texFile, const char* title)   // формула и численное значение
+void formulaWithComputationToLatex(tree_t* tree, double valueOfX, FILE* texFile, const char* title)   // формула и численное значение
 {
     formulaToLatex(tree, texFile, title);
 
-    double result = countingTree(tree->root, table);
+    double result = countingTree(tree->root, valueOfX);
     fprintf(texFile, "Результат: \\[%.4f\\]\n\n", result);
 }
 
 
-void variablesTableToLatex(VariableTable* table, FILE* texFile)
+void variablesTableToLatex(FILE* texFile, double valueOfX)
 {
     fprintf(texFile,
         "\\begin{tabular}{|c|c|}\n"                 // таблица с двумя колонками и вертик линиями
@@ -252,21 +252,14 @@ void variablesTableToLatex(VariableTable* table, FILE* texFile)
         "Переменная & Значение \\\\\n"
         "\\hline\n");
 
-    for (int i = 0; i < table->count; i++)
-    {
-        if (table->variables[i].isDefined)                          // если определена переменная и имеет значение
-        {
-            fprintf(texFile, "$%s$ & $%.2f$ \\\\\n", table->variables[i].name, table->variables[i].value);
-        }
-    }
+    fprintf(texFile, "$%s$ & $%.2f$ \\\\\n", "x", valueOfX);
     fprintf(texFile,
         "\\hline\n"
         "\\end{tabular}\n\n");
 }
 
 
-
-void createComprehensiveReport(tree_t* original, VariableTable* table, const char* filename,  float plotMinX, float plotMaxX)
+void createComprehensiveReport(tree_t* original, const char* filename,  float plotMinX, float plotMaxX, double valueOfX)                                 //VariableTable* table
 {
     FILE* texFile = fopen(filename, "w");
 
@@ -286,26 +279,204 @@ void createComprehensiveReport(tree_t* original, VariableTable* table, const cha
     writeLaTeXPreamble(texFile);                                            // заголовочек
     writeTitleAndTOC(texFile);
 
-    originalValue = writeOriginalDataSection(original, table, texFile);     // исходные данные
+    originalValue = writeOriginalDataSection(original, texFile, valueOfX);     // исходные данные
 
-    simplified = writeSimplificationSection(original, table, texFile, &simplifiedValue, plotMinX , plotMaxX);  // упрощаем исходное
+    simplified = writeSimplificationSection(original, texFile, &simplifiedValue, plotMinX , plotMaxX, valueOfX);  // упрощаем исходное
 
     if (simplified != NULL && simplified->root != NULL)                     // если упростили - берем производную
     {
-        derivative = writeDerivativeSection(simplified, table, texFile, &derivativeValue, plotMinX, plotMaxX);
+        derivative = writeDerivativeSection(simplified, texFile, &derivativeValue, plotMinX, plotMaxX, valueOfX);
     }
 
     if (simplified != NULL && derivative != NULL)                           // полученные результаты
     {
-        writeFinalResultsSection(simplified, derivative, table, texFile, simplifiedValue, derivativeValue);
+        writeFinalResultsSection(simplified, derivative, texFile, simplifiedValue, derivativeValue, valueOfX);
     }
-
-    writeSummaryTable(original, simplified, derivative, table, texFile, originalValue, simplifiedValue, derivativeValue);       // итоговая таблица значений
 
     writeLaTeXFooter(texFile);                                              // закрываем документ
     fclose(texFile);
 
     cleanupTrees(simplified, derivative);
+}
+
+double writeOriginalDataSection(tree_t* original, FILE* texFile, double valueOfX)
+{
+    fprintf(texFile,
+        "\\section{Исходные данные}\n\n"                                        // section раздел автоматически нумеруется
+        "\\subsection{Исходное выражение}\n"
+        "\\begin{dmath}\n");
+
+    nodeToLatex(original->root, texFile);
+
+    fprintf(texFile,
+        "\n\\end{dmath}\n\n");
+
+
+    double originalResult = countingTree(original->root, valueOfX);
+
+    fprintf(texFile, "Значение исходного выражения: \\[%.4f\\]\n\n", originalResult);
+
+    return originalResult;
+}
+
+tree_t* writeSimplificationSection(tree_t* original, FILE* texFile, double* simplifiedValue, float plotMinX, float plotMaxX, double valueOfX)
+{
+    fprintf(texFile, "\\section{Упрощение выражения}\n\n");
+
+    tree_t* simplified = treeCtor();
+    if (!simplified)
+    {
+        fprintf(texFile, "\\textbf{не получилось сделать дерево для упрощения}\n\n");
+        return NULL;
+    }
+
+    simplified->root = copyNode(original->root);
+    if (!simplified->root)
+    {
+        fprintf(texFile, "\\textbf{не получилось скопировать дерево}\n\n");
+        free(simplified);
+        return NULL;
+    }
+
+    fprintf(texFile, "\\subsection{Поэтапное упрощение}\n\n");
+    simplified->root = simplification(simplified->root, simplified, texFile);
+
+    fprintf(texFile,
+        "\\subsection{Финальное упрощенное выражение}\n"
+        "\\begin{dmath}\n");
+
+    nodeToLatex(simplified->root, texFile);
+    fprintf(texFile, "\n\\end{dmath}\n\n");
+
+    *simplifiedValue = countingTree(simplified->root, valueOfX);
+
+    fprintf(texFile,
+        "Значение упрощенного выражения: \\[%.4f\\]\n\n"
+        "\\subsection{График упрощенной функции}\n",
+        *simplifiedValue);
+
+    float step = (plotMaxX - plotMinX) / 1000.0;
+
+    addPlotToLatexDirect(simplified, texFile, plotMinX, plotMaxX, step, valueOfX);                      // снова графичек - теперь упрощенной функции
+
+    return simplified;
+}
+
+tree_t* writeDerivativeSection(tree_t* simplified, FILE* texFile, double* derivativeValue, float plotMinX, float plotMaxX, double valueOfX)
+{
+    fprintf(texFile, "\\section{Производная по переменной $x$}\n\n");
+
+    tree_t* derivative = diffTree(simplified);
+
+    if (derivative == NULL || derivative->root == NULL)
+    {
+        fprintf(texFile, "\\textbf{не получилось вычислить производную}\n\n");
+        return NULL;
+    }
+
+    fprintf(texFile,
+        "\\subsection{Исходная производная}\n"
+        "\\begin{dmath}\n");
+
+    nodeToLatex(derivative->root, texFile);
+
+    fprintf(texFile,
+        "\n\\end{dmath}\n\n"
+        "\\subsection{Упрощенная производная}\n");
+
+    derivative->root = simplification(derivative->root, derivative, texFile);
+    fprintf(texFile, "\\begin{dmath}\n");
+    nodeToLatex(derivative->root, texFile);
+    fprintf(texFile, "\n\\end{dmath}\n\n");
+
+    *derivativeValue = countingTree(derivative->root, valueOfX);
+    fprintf(texFile,
+        "Значение производной: \\[%.4f\\]\n\n"
+        "\\subsection{График производной}\n",
+        *derivativeValue);
+
+    float step = (plotMaxX - plotMinX) / 1000.0;
+    addPlotToLatexDirect(derivative, texFile, plotMinX, plotMaxX, step, valueOfX);                       // графичек производной
+
+    return derivative;
+}
+
+
+void writeFinalResultsSection(tree_t* simplified, tree_t* derivative, FILE* texFile, double simplifiedValue, double derivativeValue, double valueOfX)
+{
+    double xValue = valueOfX;
+
+    fprintf(texFile,
+        "\\begin{itemize}\n"
+        "\\item Значение упрощенного выражения: $f(%.2f) = %.4f$\n"
+        "\\item Значение производной: $f'(%.2f) = %.4f$\n"
+        "\\end{itemize}\n\n",
+        xValue, simplifiedValue, xValue, derivativeValue);
+
+    fprintf(texFile,
+        "\\section{Финальные результаты}\n\n"
+        "\\subsection{Упрощенное выражение и его производная}\n"
+        "\\begin{align*}\n"
+        "f(x) &= ");
+    nodeToLatex(simplified->root, texFile);
+
+    fprintf(texFile,
+        " \\\\\n"
+        "\\frac{d}{dx} &= ");
+
+    nodeToLatex(derivative->root, texFile);
+    fprintf(texFile, "\n\\end{align*}\n\n");
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void cleanupTrees(tree_t* simplified, tree_t* derivative)
+{
+    if (simplified != NULL)
+    {
+        if (simplified->root != NULL)
+        {
+            treeRecursiveDelete(simplified->root);
+        }
+        free(simplified);
+    }
+
+    if (derivative != NULL)
+    {
+        if (derivative->root != NULL)
+        {
+            treeRecursiveDelete(derivative->root);
+        }
+        free(derivative);
+    }
+}
+
+
+
+
+
+
+
+void writeLaTeXFooter(FILE* texFile)
+{
+    fprintf(texFile, "\\end{document}\n");
 }
 
 
@@ -335,193 +506,4 @@ void writeTitleAndTOC(FILE* texFile)
         "\\maketitle\n"                        // генерит титульную страницу
         "\\tableofcontents\n"
         "\\newpage\n");                           // нов страница
-}
-
-double writeOriginalDataSection(tree_t* original, VariableTable* table, FILE* texFile)
-{
-    fprintf(texFile,
-        "\\section{Исходные данные}\n\n"                                        // section раздел автоматически нумеруется
-        "\\subsection{Исходное выражение}\n"
-        "\\begin{dmath}\n");
-    nodeToLatex(original->root, texFile);
-
-    fprintf(texFile,
-        "\n\\end{dmath}\n\n"
-        "\\subsection{Таблица переменных}\n\n");
-
-    variablesTableToLatex(table, texFile);
-
-    double originalResult = countingTree(original->root, table);
-
-    fprintf(texFile, "Значение исходного выражения: \\[%.4f\\]\n\n", originalResult);
-
-    return originalResult;
-}
-
-tree_t* writeSimplificationSection(tree_t* original, VariableTable* table, FILE* texFile, double* simplifiedValue, float plotMinX, float plotMaxX)
-{
-    fprintf(texFile, "\\section{Упрощение выражения}\n\n");
-
-    tree_t* simplified = treeCtor();
-    if (!simplified)
-    {
-        fprintf(texFile, "\\textbf{не получилось сделать дерево для упрощения}\n\n");
-        return NULL;
-    }
-
-    simplified->root = copyNode(original->root);
-    if (!simplified->root)
-    {
-        fprintf(texFile, "\\textbf{не получилось скопировать дерево}\n\n");
-        free(simplified);
-        return NULL;
-    }
-
-    fprintf(texFile, "\\subsection{Поэтапное упрощение}\n\n");
-    simplified->root = simplification(simplified->root, simplified, texFile);
-
-    fprintf(texFile,
-        "\\subsection{Финальное упрощенное выражение}\n"
-        "\\begin{dmath}\n");
-
-    nodeToLatex(simplified->root, texFile);
-    fprintf(texFile, "\n\\end{dmath}\n\n");
-
-    *simplifiedValue = countingTree(simplified->root, table);
-
-    fprintf(texFile,
-        "Значение упрощенного выражения: \\[%.4f\\]\n\n"
-        "\\subsection{График упрощенной функции}\n",
-        *simplifiedValue);
-
-    float step = (plotMaxX - plotMinX) / 1000.0;
-
-    addPlotToLatexDirect(simplified, table, texFile, plotMinX, plotMaxX, step);                      // снова графичек - теперь упрощенной функции
-
-    return simplified;
-}
-
-tree_t* writeDerivativeSection(tree_t* simplified, VariableTable* table, FILE* texFile, double* derivativeValue, float plotMinX, float plotMaxX)
-{
-    fprintf(texFile, "\\section{Производная по переменной $x$}\n\n");
-
-    tree_t* derivative = diffTree(simplified, table, "x");
-
-    if (derivative == NULL || derivative->root == NULL)
-    {
-        fprintf(texFile, "\\textbf{не получилось вычислить производную}\n\n");
-        return NULL;
-    }
-
-    fprintf(texFile,
-        "\\subsection{Исходная производная}\n"
-        "\\begin{dmath}\n");
-
-    nodeToLatex(derivative->root, texFile);
-
-    fprintf(texFile,
-        "\n\\end{dmath}\n\n"
-        "\\subsection{Упрощенная производная}\n");
-
-    derivative->root = simplification(derivative->root, derivative, texFile);
-    fprintf(texFile, "\\begin{dmath}\n");
-    nodeToLatex(derivative->root, texFile);
-    fprintf(texFile, "\n\\end{dmath}\n\n");
-
-    *derivativeValue = countingTree(derivative->root, table);
-    fprintf(texFile,
-        "Значение производной: \\[%.4f\\]\n\n"
-        "\\subsection{График производной}\n",
-        *derivativeValue);
-
-    float step = (plotMaxX - plotMinX) / 1000.0;
-    addPlotToLatexDirect(derivative, table, texFile, plotMinX, plotMaxX, step);                       // графичек производной
-
-    return derivative;
-}
-
-void writeFinalResultsSection(tree_t* simplified, tree_t* derivative, VariableTable* table, FILE* texFile, double simplifiedValue, double derivativeValue)
-{
-    double xValue = 0.0;
-    if (table->count > 0 && table->variables[0].isDefined)
-    {
-        xValue = table->variables[0].value;
-    }
-
-    fprintf(texFile,
-        "\\begin{itemize}\n"
-        "\\item Значение упрощенного выражения: $f(%.2f) = %.4f$\n"
-        "\\item Значение производной: $f'(%.2f) = %.4f$\n"
-        "\\end{itemize}\n\n",
-        xValue, simplifiedValue, xValue, derivativeValue);
-
-    fprintf(texFile,
-        "\\section{Финальные результаты}\n\n"
-        "\\subsection{Упрощенное выражение и его производная}\n"
-        "\\begin{align*}\n"
-        "f(x) &= ");
-    nodeToLatex(simplified->root, texFile);
-}
-
-void writeSummaryTable(tree_t* original, tree_t* simplified, tree_t* derivative, VariableTable* table, FILE* texFile, double originalValue, double simplifiedValue, double derivativeValue)
-{
-    fprintf(texFile,
-        "\\section{Итоговая таблица}\n\n"
-        "\\begin{tabular}{|l|c|}\n"
-        "\\hline\n"
-        "Параметр & Значение \\\\\n"
-        "\\hline\n"
-        "Исходное выражение & $%.4f$ \\\\\n"
-        "Упрощенное выражение & $%.4f$ \\\\\n",
-        originalValue, simplifiedValue);
-
-    if (derivative != NULL && derivative->root != NULL)
-    {
-        fprintf(texFile, "Производная по $x$ & $%.4f$ \\\\\n", derivativeValue);
-    }
-    else
-    {
-        fprintf(texFile, "Производная по $x$ & не вычислена \\\\\n");
-    }
-
-    fprintf(texFile, "Размер исходного дерева & %d узлов \\\\\n", countTreeSize(original->root));
-
-    if (simplified != NULL && simplified->root != NULL)
-    {
-        fprintf(texFile, "Размер упрощенного дерева & %d узлов \\\\\n", countTreeSize(simplified->root));
-    }
-    else
-    {
-        fprintf(texFile, "Размер упрощенного дерева & не определен \\\\\n");
-    }
-
-    fprintf(texFile,
-        "\\hline\n"
-        "\\end{tabular}\n");
-}
-
-void cleanupTrees(tree_t* simplified, tree_t* derivative)
-{
-    if (simplified != NULL)
-    {
-        if (simplified->root != NULL)
-        {
-            treeRecursiveDelete(simplified->root);
-        }
-        free(simplified);
-    }
-
-    if (derivative != NULL)
-    {
-        if (derivative->root != NULL)
-        {
-            treeRecursiveDelete(derivative->root);
-        }
-        free(derivative);
-    }
-}
-
-void writeLaTeXFooter(FILE* texFile)
-{
-    fprintf(texFile, "\\end{document}\n");
 }

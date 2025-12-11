@@ -169,9 +169,7 @@ node_t* getFunction(parserState* st)                                  // отв�
 
     // либо если не операция - получается на вход поступила переменная
 
-    findVarInTable(st->table, funcName);
-
-    return VAR_(funcName);
+    return VAR_("x");
 }
 
 
@@ -240,7 +238,7 @@ node_t* getGrammar(parserState* st)                                             
 }
 
 
-tree_t* loadMathTree(const char* filename, VariableTable* table)
+tree_t* loadMathTree(const char* filename)                                              //VariableTable* table
 {
     FILE* file = fopen(filename, "r");
 
@@ -270,7 +268,6 @@ tree_t* loadMathTree(const char* filename, VariableTable* table)
 
     parserState st = {
         .s = buffer,
-        .table = table
     };
 
     tree_t* tree = treeCtor();
@@ -286,7 +283,7 @@ tree_t* loadMathTree(const char* filename, VariableTable* table)
 
     if (tree->root == NULL)
     {
-        printf("ошибка не удалось распарсить выражение\n");
+        printf("ошибочка не удалось распарсить выражение\n");
         free(buffer);
         free(tree);
         return NULL;

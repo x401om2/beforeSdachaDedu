@@ -7,55 +7,39 @@
 #include <stdbool.h>
 #include <math.h>
 
-void addPlotToLatexDirect(tree_t* tree, VariableTable* table, FILE* texFile, double xMin, double xMax, double step)
+
+void addPlotToLatexDirect(tree_t* tree, FILE* texFile, double xMin, double xMax, double step, double valueOfX)
 {
     if (tree == NULL || texFile == NULL)
     {
         return;
     }
 
-    int indexX = -1;
-    double originalX= 0;
-
-    for (int i = 0; i < table->count; i++)
-    {
-        if (strcmp(table->variables[i].name, "x") == 0)
-        {
-            indexX = i;
-            originalX = table->variables[i].value;
-            break;
-        }
-    }
+    double originalX = valueOfX;
 
     double yMin = 0, yMax = 0;
 
-    calculateYRangeSimple(tree, table, indexX, xMin, xMax, step, &yMin, &yMax);
+    calculateYRangeSimple(tree, xMin, xMax, step, &yMin, &yMax, valueOfX);            //table
 
     writePlotHeaderSimple(texFile, xMin, xMax, yMin, yMax);
 
-    writePlotPoints(tree, table, texFile, indexX, xMin, xMax, step);
+    writePlotPoints(tree, texFile, xMin, xMax, step, valueOfX);                       // table
 
     fprintf(texFile, "};\n\\end{axis}\n\\end{tikzpicture}\n\\end{center}\n\n");
-
-    if (indexX != -1)                                                               // если изменяли х то вернем исходное
-    {
-        table->variables[indexX].value = originalX;
-    }
 }
 
-void calculateYRangeSimple(const tree_t* tree, VariableTable* table, int indexX, double xMin, double xMax, double step, double* yMin, double* yMax)
+
+
+void calculateYRangeSimple(const tree_t* tree, double xMin, double xMax, double step, double* yMin, double* yMax, double valueOfX)       //VariableTable* table
 {
     *yMin = 1e10;
     *yMax = -1e10;
 
-    for (double x = xMin; x <= xMax; x += step)                                 // цикл по всем знач с шагом step
+    for (double x = xMin; x <= xMax; x += step)                                    // цикл по всем знач с шагом step
     {
-        if (indexX != -1)
-        {
-            table->variables[indexX].value = x;
-        }
+        valueOfX = x;
 
-        double y = countingTree(tree->root, table);
+        double y = countingTree(tree->root, valueOfX);
 
         if (!isnan(y))
         {
@@ -104,16 +88,13 @@ void writePlotHeaderSimple(FILE* texFile, double xMin, double xMax, double yMin,
         "\\addplot[blue, thick, smooth] coordinates {\n", xMin, xMax, yMin, yMax);  // команда построения
 }
 
-void writePlotPoints(const tree_t* tree, VariableTable* table, FILE* texFile, int indexX, double xMin, double xMax, double step)
+void writePlotPoints(const tree_t* tree, FILE* texFile, double xMin, double xMax, double step, double valueOfX) // VariableTable* table
 {
     for (double x = xMin; x <= xMax; x += step)
     {
-        if (indexX != -1)
-        {
-            table->variables[indexX].value = x;
-        }
+        valueOfX = x;
 
-        double y = countingTree(tree->root, table);
+        double y = countingTree(tree->root, valueOfX);
 
         if (!isnan(y))
         {
